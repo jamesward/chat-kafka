@@ -7,7 +7,6 @@ chatWS.onmessage = function(event) {
     const li = document.createElement("li");
     li.innerHTML = event.data;
     document.getElementById("chats").appendChild(li);
-    document.getElementById("message").value = "";
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -15,5 +14,6 @@ document.addEventListener("DOMContentLoaded", () => {
         event.preventDefault();
         const message = document.getElementById("message").value;
         chatWS.send(message);
+        document.getElementById("message").value = "";
     });
 });
