@@ -7,7 +7,9 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.SpringBootApplication
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.runApplication
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -43,6 +45,12 @@ data class BootstrapServers(val stringList: String)
 
 @Configuration
 class WebSocketConfig {
+
+    @Bean
+    @ConditionalOnProperty(name = ["kafka.bootstrap.servers"])
+    fun bootstrapServers(@Value("\${kafka.bootstrap.servers}") bootstrapServers: String): BootstrapServers {
+        return BootstrapServers(bootstrapServers)
+    }
 
     @Bean
     fun simpleUrlHandlerMapping(bootstrapServers: BootstrapServers): SimpleUrlHandlerMapping {
