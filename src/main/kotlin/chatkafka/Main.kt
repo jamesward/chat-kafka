@@ -1,7 +1,10 @@
 package chatkafka
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
+import io.cloudevents.CloudEvent
+import io.cloudevents.core.v1.CloudEventBuilder
+import io.cloudevents.kafka.CloudEventDeserializer
+import io.cloudevents.kafka.CloudEventSerializer
 import kotlinx.html.ButtonType
 import kotlinx.html.HTML
 import kotlinx.html.InputType
@@ -44,6 +47,7 @@ import reactor.kafka.receiver.ReceiverOptions
 import reactor.kafka.sender.KafkaSender
 import reactor.kafka.sender.SenderOptions
 import reactor.kafka.sender.SenderRecord
+import java.util.*
 
 
 @SpringBootApplication
@@ -80,36 +84,42 @@ class WebSocketConfig {
         val consumerProps = mapOf(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
             ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
-            ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
+            ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to CloudEventDeserializer::class.java,
             ConsumerConfig.GROUP_ID_CONFIG to "group",
         )
 
         val producerProps = mapOf(
             ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
             ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
-            ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
+            ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to CloudEventSerializer::class.java,
         )
 
         return WebSocketHandler { session ->
-            val receiverOptions = ReceiverOptions.create<String, String>(consumerProps)
+            val receiverOptions = ReceiverOptions.create<String, CloudEvent>(consumerProps)
                 .consumerProperty(ConsumerConfig.CLIENT_ID_CONFIG, session.id)
                 .subscription(listOf("chat_out"))
 
             val kafkaReceiver = KafkaReceiver.create(receiverOptions).receive()
 
-            val kafkaToClient = kafkaReceiver.map {
-                val text = objectMapper.readValue<Text>(it.value())
-                session.textMessage(text.body)
+            val kafkaToClient = kafkaReceiver.mapNotNull {
+                it.value().data?.toBytes()?.let { data ->
+                    session.textMessage(String(data))
+                }
             }
 
-            val senderOptions = SenderOptions.create<String, String>(producerProps)
+            val senderOptions = SenderOptions.create<String, CloudEvent>(producerProps)
 
             val kafkaSender = KafkaSender.create(senderOptions)
 
-            val clientToRecord = session.receive().map {
-                val text = Text(it.payloadAsText)
-                val json = objectMapper.writeValueAsString(text)
-                SenderRecord.create(ProducerRecord("chat_in", session.id, json), null)
+            val clientToRecord = session.receive().mapNotNull {
+                val event = CloudEventBuilder()
+                    .withId(UUID.randomUUID().toString())
+                    .withType("chat")
+                    .withSource(session.handshakeInfo.uri)
+                    .withData(it.payloadAsText.toByteArray())
+                    .build()
+
+                SenderRecord.create(ProducerRecord("chat_in", session.id, event), null)
             }
 
             val clientToKafka = kafkaSender.send(clientToRecord)

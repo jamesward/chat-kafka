@@ -1,5 +1,8 @@
 package chatkafka
 
+import io.cloudevents.CloudEvent
+import io.cloudevents.kafka.CloudEventDeserializer
+import io.cloudevents.kafka.CloudEventSerializer
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -39,17 +42,17 @@ class Forwarder(bootstrapServers: BootstrapServers) {
     private val consumerProps = mapOf(
         ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
         ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
-        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
+        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to CloudEventDeserializer::class.java,
         ConsumerConfig.GROUP_ID_CONFIG to "test",
     )
 
     private val producerProps = mapOf(
         ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
         ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
-        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
+        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to CloudEventSerializer::class.java,
     )
 
-    private val receiverOptions = ReceiverOptions.create<String, String>(consumerProps)
+    private val receiverOptions = ReceiverOptions.create<String, CloudEvent>(consumerProps)
         .consumerProperty(ConsumerConfig.CLIENT_ID_CONFIG, "test")
         .subscription(listOf("chat_in"))
 
@@ -57,7 +60,7 @@ class Forwarder(bootstrapServers: BootstrapServers) {
 
     private val inToOut = kafkaReceiver.map { SenderRecord.create(ProducerRecord("chat_out", "", it.value()), null) }
 
-    private val senderOptions = SenderOptions.create<String, String>(producerProps)
+    private val senderOptions = SenderOptions.create<String, CloudEvent>(producerProps)
 
     private val kafkaSender = KafkaSender.create(senderOptions)
 

@@ -14,7 +14,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("io.projectreactor.kafka:reactor-kafka")
 
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    runtimeOnly("com.fasterxml.jackson.module:jackson-module-kotlin")
+
+    implementation("io.cloudevents:cloudevents-kafka:2.2.0")
 
     implementation("org.webjars:bootstrap:4.5.3")
     implementation("org.jetbrains.kotlinx:kotlinx-html-jvm:0.7.3")
