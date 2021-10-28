@@ -1,7 +1,27 @@
 package chatkafka
 
-import kotlinx.html.*
-import kotlinx.html.dom.*
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
+import kotlinx.html.ButtonType
+import kotlinx.html.HTML
+import kotlinx.html.InputType
+import kotlinx.html.LinkRel
+import kotlinx.html.ScriptType
+import kotlinx.html.a
+import kotlinx.html.body
+import kotlinx.html.button
+import kotlinx.html.div
+import kotlinx.html.dom.createHTMLDocument
+import kotlinx.html.dom.serialize
+import kotlinx.html.form
+import kotlinx.html.head
+import kotlinx.html.html
+import kotlinx.html.id
+import kotlinx.html.input
+import kotlinx.html.link
+import kotlinx.html.nav
+import kotlinx.html.script
+import kotlinx.html.ul
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -17,17 +37,13 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.reactive.handler.SimpleUrlHandlerMapping
 import org.springframework.web.reactive.socket.WebSocketHandler
-import org.springframework.web.reactive.socket.WebSocketSession
 import org.springframework.web.reactive.socket.server.support.WebSocketHandlerAdapter
 import org.w3c.dom.Document
-import reactor.core.publisher.Flux
-import reactor.core.publisher.Mono
 import reactor.kafka.receiver.KafkaReceiver
 import reactor.kafka.receiver.ReceiverOptions
 import reactor.kafka.sender.KafkaSender
 import reactor.kafka.sender.SenderOptions
 import reactor.kafka.sender.SenderRecord
-import java.time.Duration
 
 
 @SpringBootApplication
@@ -43,6 +59,8 @@ class Main {
 
 data class BootstrapServers(val stringList: String)
 
+data class Text(val body: String)
+
 @Configuration
 class WebSocketConfig {
 
@@ -53,11 +71,11 @@ class WebSocketConfig {
     }
 
     @Bean
-    fun simpleUrlHandlerMapping(bootstrapServers: BootstrapServers): SimpleUrlHandlerMapping {
-        return SimpleUrlHandlerMapping(mapOf("/chat" to chat(bootstrapServers)), 0)
+    fun simpleUrlHandlerMapping(bootstrapServers: BootstrapServers, objectMapper: ObjectMapper): SimpleUrlHandlerMapping {
+        return SimpleUrlHandlerMapping(mapOf("/chat" to chat(bootstrapServers, objectMapper)), 0)
     }
 
-    fun chat(bootstrapServers: BootstrapServers): WebSocketHandler {
+    fun chat(bootstrapServers: BootstrapServers, objectMapper: ObjectMapper): WebSocketHandler {
 
         val consumerProps = mapOf(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
@@ -79,17 +97,22 @@ class WebSocketConfig {
 
             val kafkaReceiver = KafkaReceiver.create(receiverOptions).receive()
 
-            val kafkaToClient = kafkaReceiver.map { session.textMessage(it.value()) }
-
+            val kafkaToClient = kafkaReceiver.map {
+                val text = objectMapper.readValue<Text>(it.value())
+                session.textMessage(text.body)
+            }
 
             val senderOptions = SenderOptions.create<String, String>(producerProps)
 
             val kafkaSender = KafkaSender.create(senderOptions)
 
-            val clientToRecord = session.receive().map { SenderRecord.create(ProducerRecord("chat_in", session.id, it.payloadAsText), null) }
+            val clientToRecord = session.receive().map {
+                val text = Text(it.payloadAsText)
+                val json = objectMapper.writeValueAsString(text)
+                SenderRecord.create(ProducerRecord("chat_in", session.id, json), null)
+            }
 
             val clientToKafka = kafkaSender.send(clientToRecord)
-
 
             // todo: do we need to cancel / close the kafka stuff when the websocket closes?
             session.send(kafkaToClient).and(clientToKafka)
