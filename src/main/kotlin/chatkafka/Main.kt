@@ -80,23 +80,21 @@ class WebSocketConfig {
     }
 
     fun chat(bootstrapServers: BootstrapServers, objectMapper: ObjectMapper): WebSocketHandler {
-
-        val consumerProps = mapOf(
-            ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
-            ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
-            ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to CloudEventDeserializer::class.java,
-            ConsumerConfig.GROUP_ID_CONFIG to "group",
-        )
-
-        val producerProps = mapOf(
-            ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
-            ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
-            ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to CloudEventSerializer::class.java,
-        )
-
         return WebSocketHandler { session ->
+            val consumerProps = mapOf(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to CloudEventDeserializer::class.java,
+                ConsumerConfig.GROUP_ID_CONFIG to session.id,
+            )
+
+            val producerProps = mapOf(
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers.stringList,
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG to StringSerializer::class.java,
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG to CloudEventSerializer::class.java,
+            )
+
             val receiverOptions = ReceiverOptions.create<String, CloudEvent>(consumerProps)
-                .consumerProperty(ConsumerConfig.CLIENT_ID_CONFIG, session.id)
                 .subscription(listOf("chat_out"))
 
             val kafkaReceiver = KafkaReceiver.create(receiverOptions).receive()
